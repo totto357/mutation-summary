@@ -21,11 +21,37 @@ window.addEventListener('DOMContentLoaded', function () {
   }
   const frameDocument = frame.contentDocument
 
+  // フレーム内スタイルを追加
+  const frameStyle = frameDocument.createElement("style")
+  frameStyle.type = "text/css"
+  frameStyle.textContent = `
+    .ripple-effect {
+      position: fixed;
+      z-index: 99999998;
+      background: #000;
+      width: 50px;
+      height: 50px;
+      border-radius: 100%;
+      transform: scale(1, 1);
+      opacity: 0;
+      animation: ripple-effect .6s linear;
+      transition: 0.3s linear;
+    }
+
+    @keyframes ripple-effect {
+      0% {
+        opacity: 0.5;
+        transform: scale(0, 0);
+      }
+    }
+  `
+
   while (frameDocument.firstChild) {
     frameDocument.removeChild(frameDocument.firstChild);
   }
 
   let base = "";
+  let sessionId = "";
 
   var mirror = new TreeMirror(frameDocument, {
     createElement: function (tagName) {
@@ -60,9 +86,14 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 
   let mouse = frameDocument.createElement("div")
-  mouse.innerHTML = `<svg style="width:24px;height:24px" viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M13.64,21.97C13.14,22.21 12.54,22 12.31,21.5L10.13,16.76L7.62,18.78C7.45,18.92 7.24,19 7,19A1,1 0 0,1 6,18V3A1,1 0 0,1 7,2C7.24,2 7.47,2.09 7.64,2.23L7.65,2.22L19.14,11.86C19.57,12.22 19.62,12.85 19.27,13.27C19.12,13.45 18.91,13.57 18.7,13.61L15.54,14.23L17.74,18.96C18,19.46 17.76,20.05 17.26,20.28L13.64,21.97Z" />
-                    </svg>`
+  mouse.innerHTML = `
+      <svg style="width:30px;height:30px" x="0px" y="0px" viewBox="0 0 28 28" enable-background="new 0 0 28 28" >
+          <polygon fill="#FFFFFF" points="8.2,20.9 8.2,4.9 19.8,16.5 13,16.5 12.6,16.6 "/>
+          <polygon fill="#FFFFFF" points="17.3,21.6 13.7,23.1 9,12 12.7,10.5 "/>
+          <rect x="12.5" y="13.6" transform="matrix(0.9221 -0.3871 0.3871 0.9221 -5.7605 6.5909)" width="2" height="8"/>
+          <polygon points="9.2,7.3 9.2,18.5 12.2,15.6 12.6,15.5 17.4,15.5 "/>
+      </svg>
+      `
   mouse.style = `position: fixed;
                  z-index: 99999999;
                  top: -100px; left: -100px;
@@ -101,9 +132,12 @@ window.addEventListener('DOMContentLoaded', function () {
 
     if (msg.type === "start") {
       base = args.base;
+      sessionId = args.sessionId;
 
     } else if (msg.type === "initialize") {
       mirror.initialize.apply(mirror, args);
+
+      frameDocument.head.appendChild(frameStyle)
       frameDocument.body.appendChild(mouse)
 
     } else if (msg.type === "applyChanged") {
@@ -115,12 +149,28 @@ window.addEventListener('DOMContentLoaded', function () {
       node.scrollTo(args.left, args.top)
 
     } else if (msg.type === "mousemove") {
-      mouse.style.top = args.clientY
-      mouse.style.left = args.clientX
+      mouse.style.top = args.clientY - 6 // SVGの余白の関係上ずらす
+      mouse.style.left = args.clientX - 8 // SVGの余白の関係上ずらす
+
+    } else if (msg.type === "click") {
+      const ripple = frameDocument.createElement("div")
+      ripple.classList.add("ripple-effect")
+      ripple.style.top = args.clientY - 25
+      ripple.style.left = args.clientX - 25
+      frameDocument.body.appendChild(ripple)
+
+      setTimeout(() => {
+        frameDocument.body.removeChild(ripple)
+      }, 1000);
 
     } else if (msg.type === "resize") {
       frame.style.height = args.height
       frame.style.width = args.width
+
+    } else if (msg.type === "input") {
+      const id = args.target
+      const node = mirror.idMap[id]
+      node.value = args.value
 
     } else {
       console.error("対応するイベントタイプがないよ。")
@@ -129,11 +179,12 @@ window.addEventListener('DOMContentLoaded', function () {
   })
 
   port.onDisconnect.addListener(function (msg) {
-    const blob = new Blob([ JSON.stringify(receivedMessages) ], { "type" : "text/plain" })
+    const blob = new Blob([ JSON.stringify(receivedMessages) ], { "type" : "application/json" })
     window.URL = window.URL || window.webkitURL
     const a = document.createElement("a")
-    a.textContent = "ダウンロード"
+    a.textContent = "download"
     a.href = window.URL.createObjectURL(blob)
+    a.download = sessionId
     document.body.appendChild(a)
 
     // window.close()

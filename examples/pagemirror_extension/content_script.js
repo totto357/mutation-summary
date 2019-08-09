@@ -24,6 +24,7 @@ const lastTime = {
 }
 
 let eventListeners = []
+let startTime = 0
 
 chrome.extension.onConnect.addListener(function (port) {
 
@@ -37,9 +38,11 @@ chrome.extension.onConnect.addListener(function (port) {
 
   const postMessage = ({ type, args }) => {
     // 別タブにメッセージを送信
+    const time = new Date().getTime()
     let message = {
       type,
-      time: new Date().getTime(),
+      time,
+      elapsed: time - startTime,
       sessionId,
       eventId: uuid(),
       divided: false,
@@ -75,10 +78,12 @@ chrome.extension.onConnect.addListener(function (port) {
   }
 
   // 開始イベント
+  startTime = new Date().getTime()
   postMessage({
     type: "start",
     args: {
       base: location.href.match(/^(.*\/)[^\/]*$/)[1],
+      sessionId,
     }
   });
 
@@ -128,7 +133,7 @@ chrome.extension.onConnect.addListener(function (port) {
   window.addEventListener("scroll", scrollEventListener, true)
   eventListeners.push(["scroll", scrollEventListener, true])
 
-  // マウス
+  // マウス移動
   const mousemoveEventListener = (e) => {
     throttle("mousemove", () => {
       postMessage({
@@ -142,6 +147,19 @@ chrome.extension.onConnect.addListener(function (port) {
   }
   window.addEventListener("mousemove", mousemoveEventListener)
   eventListeners.push(["mousemove", mousemoveEventListener])
+
+  // クリック
+  const clickEventListener = (e) => {
+    postMessage({
+      type: 'click',
+      args: {
+        clientX: e.clientX,
+        clientY: e.clientY,
+      }
+    })
+  }
+  window.addEventListener("click", clickEventListener, true)
+  eventListeners.push(["click", clickEventListener, true])
 
   // リサイズ
   const resizeEventListener = () => {
@@ -158,6 +176,83 @@ chrome.extension.onConnect.addListener(function (port) {
   resizeEventListener()
   window.addEventListener("resize", resizeEventListener)
   eventListeners.push(["resize", resizeEventListener])
+
+  // Input入力
+  const postInputEvent = (target, value) => {
+    const node = mirrorClient.serializeNode(target)
+    if (!node) {
+      return
+    }
+    postMessage({
+      type: 'input',
+      args: {
+        target: node.id,
+        value,
+      }
+    })
+  }
+
+  // JSで入力されたとき
+  // const jsInputHandler = function (target, before, after) {
+  //   // チェックボックスとラジオボタンは描画できるので、ひとまず除外
+  //   // イベントを取得するという意味ではとった方が良いが、イベントが多すぎる
+  //   if (target.type === "checkbox" || target.type === "radio") {
+  //     return
+  //   }
+  //   if (before == after) {
+  //     return
+  //   }
+  //   console.log(after)
+  //   postInputEvent(target, after)
+  // };
+  const code = `(function (target, property, callback) {
+    const pd = Object.getOwnPropertyDescriptor(target, property);
+    if (!(pd && pd.configurable && pd.set)) {
+      return
+    }
+    Object.defineProperty(target, property, {
+      configurable: pd.configurable,
+      enumerable: pd.enumerable,
+      get: pd.get,
+      set: function (v) {
+        const _target = this;
+        const before = this.value
+        pd.set.call(this, v);
+
+        window.setTimeout(function () {
+          if (_target.type === "checkbox" || _target.type === "radio") {
+            return
+          }
+          if (before == v) {
+            return
+          }
+          const e = new Event('input', {
+            'bubbles': true,
+            'cancelable': true
+          });
+          _target.dispatchEvent(e);
+          // callback(_target, before, v)
+        }, 0)
+      }
+    })
+  })(HTMLInputElement.prototype, "value");`
+  // })(HTMLInputElement.prototype, "value", jsInputHandler);
+
+  const script = document.createElement('script');
+  script.textContent = code;
+  (document.head || document.documentElement).appendChild(script);
+  script.parentNode.removeChild(script);
+
+  // ユーザが入力したとき
+  const userInputHandler = (e) => {
+    const target = e.target
+    if (target.type === "checkbox" || target.type === "radio") {
+      return
+    }
+    postInputEvent(target, target.value)
+  }
+  window.addEventListener("input", userInputHandler, true)
+  eventListeners.push(["input", userInputHandler])
 
   port.onDisconnect.addListener(function () {
     mirrorClient.disconnect();
