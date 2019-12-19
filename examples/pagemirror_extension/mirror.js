@@ -1,3 +1,4 @@
+import AWS from "aws-sdk"
 
 window.addEventListener('DOMContentLoaded', function () {
   if (typeof WebKitMutationObserver !== 'function') {
@@ -108,12 +109,12 @@ window.addEventListener('DOMContentLoaded', function () {
     receivedMessages.push(msg)
 
     let args = null
-    if (msg.divided) {
+    if (msg.dividedEvent) {
       !events[msg.eventId] && (events[msg.eventId] = [])
-      events[msg.eventId].push({ index: msg.divided.index, args: msg.args })
+      events[msg.eventId].push({ index: msg.dividedEvent.index, args: msg.args })
 
       // 分割してるイベントの途中はなにもしない
-      if (events[msg.eventId].length < msg.divided.size) {
+      if (events[msg.eventId].length < msg.dividedEvent.size) {
         return
       }
 
@@ -130,29 +131,29 @@ window.addEventListener('DOMContentLoaded', function () {
       args = JSON.parse(msg.args)
     }
 
-    if (msg.type === "start") {
+    if (msg.eventType === "start") {
       base = args.base;
       sessionId = args.sessionId;
 
-    } else if (msg.type === "initialize") {
+    } else if (msg.eventType === "initialize") {
       mirror.initialize.apply(mirror, args);
 
       frameDocument.head.appendChild(frameStyle)
       frameDocument.body.appendChild(mouse)
 
-    } else if (msg.type === "applyChanged") {
+    } else if (msg.eventType === "applyChanged") {
       mirror.applyChanged.apply(mirror, args);
 
-    } else if (msg.type === "scroll") {
+    } else if (msg.eventType === "scroll") {
       const id = args.target
       const node = args.isScrollingElement ? frameDocument.scrollingElement : mirror.idMap[id]
       node.scrollTo(args.left, args.top)
 
-    } else if (msg.type === "mousemove") {
+    } else if (msg.eventType === "mousemove") {
       mouse.style.top = args.clientY - 6 // SVGの余白の関係上ずらす
       mouse.style.left = args.clientX - 8 // SVGの余白の関係上ずらす
 
-    } else if (msg.type === "click") {
+    } else if (msg.eventType === "click") {
       const ripple = frameDocument.createElement("div")
       ripple.classList.add("ripple-effect")
       ripple.style.top = args.clientY - 25
@@ -163,11 +164,11 @@ window.addEventListener('DOMContentLoaded', function () {
         frameDocument.body.removeChild(ripple)
       }, 1000);
 
-    } else if (msg.type === "resize") {
+    } else if (msg.eventType === "resize") {
       frame.style.height = args.height
       frame.style.width = args.width
 
-    } else if (msg.type === "input") {
+    } else if (msg.eventType === "input") {
       const id = args.target
       const node = mirror.idMap[id]
       node.value = args.value

@@ -1,5 +1,5 @@
 const uuid = () => {
-  let chars = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".split("");
+  let chars = "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx".split("");
   for (let i = 0, len = chars.length; i < len; i++) {
     switch (chars[i]) {
       case "x":
@@ -14,6 +14,14 @@ const uuid = () => {
 }
 
 // 変数
+const date = ((date) => {
+  let format = "yyyyMMdd"
+  format = format.replace(/yyyy/g, String(date.getFullYear()))
+  format = format.replace(/MM/g, ("0" + String(date.getMonth() + 1)).slice(-2))
+  format = format.replace(/dd/g, ("0" + String(date.getDate())).slice(-2))
+  return format
+})(new Date())
+
 const sessionId = uuid()
 
 const throttleInterval = 50
@@ -40,12 +48,15 @@ chrome.extension.onConnect.addListener(function (port) {
     // 別タブにメッセージを送信
     const time = new Date().getTime()
     let message = {
-      type,
-      time,
-      elapsed: time - startTime,
+      contractId: 1,
+      userId: 2,
+      eventType: type,
+      date,
+      dateTime: time,
+      elapsedTime: time - startTime,
       sessionId,
       eventId: uuid(),
-      divided: false,
+      dividedEvent: false,
       args: null,
     }
 
@@ -61,7 +72,7 @@ chrome.extension.onConnect.addListener(function (port) {
 
     // 分割する場合
     for (let index = 0; index < divided.length; index++) {
-      message.divided = {
+      message.dividedEvent = {
         index,
         size: divided.length,
       }
